@@ -1,33 +1,28 @@
-let OriginalWebSocket = window.WebSocket;
+function injectWebSocketHook() {
+    let script = document.createElement('script');
+    script.src = chrome.runtime.getURL('injected.js');
+    script.onload = () => script.remove();
+    (document.head || document.documentElement).appendChild(script);
+}
 
-window.WebSocket = function (url, protocols) {
-  let socket = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
+injectWebSocketHook();
 
-  socket.addEventListener('message', function (event) {
-    chrome.runtime.sendMessage({
-      action: 'logMessage',
-      direction: 'incoming',
-      data: safeJson(event.data)
-    });
-  });
-
-  let originalSend = socket.send;
-  socket.send = function (data) {
-    chrome.runtime.sendMessage({
-      action: 'logMessage',
-      direction: 'outgoing',
-      data: safeJson(data)
-    });
-    return originalSend.apply(this, arguments);
-  };
-
-  return socket;
-};
+window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+    if (event.data?.type === 'WS_LOG') {
+        console.log('[content] Forwarding to background:', event.data);
+        chrome.runtime.sendMessage({
+            action: 'logMessage',
+            direction: event.data.direction,
+            data: safeJson(event.data.data)
+        });
+    }
+});
 
 function safeJson(data) {
-  try {
-    return JSON.parse(data);
-  } catch (e) {
-    return data;
-  }
-};
+    try {
+        return JSON.parse(data);
+    } catch (e) {
+        return data;
+    }
+}  
